@@ -1,7 +1,7 @@
 [PreviousGenFiles]
-HeaderPath=F:/Documents/STM32F205--RBT6/CubeMx205R-C/SPI_adc1_CAN_UART_HAL_F205RBT6_20200319-pps-interrupt_Aceinna_add_I2C/Inc
+HeaderPath=F:/Materials/On_site/SPI_Verification_C_F205RBT6/Inc
 HeaderFiles=stm32f2xx_it.h;stm32f2xx_hal_conf.h;main.h;
-SourcePath=F:/Documents/STM32F205--RBT6/CubeMx205R-C/SPI_adc1_CAN_UART_HAL_F205RBT6_20200319-pps-interrupt_Aceinna_add_I2C/Src
+SourcePath=F:/Materials/On_site/SPI_Verification_C_F205RBT6/Src
 SourceFiles=stm32f2xx_it.c;stm32f2xx_hal_msp.c;main.c;
 
 [PreviousLibFiles]
