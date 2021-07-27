@@ -291,7 +291,7 @@ ARM Macro Assembler    Page 5
   170 00000000                 IMPORT           SystemInit
   171 00000000                 IMPORT           __main
   172 00000000         
-  173 00000000 4806            LDR              R0, =SystemInit
+  173 00000000 4806    y       LDR              R0, =SystemInit
   174 00000002 4780            BLX              R0
   175 00000004 4806            LDR              R0, =__main
   176 00000006 4700            BX               R0
@@ -646,18 +646,18 @@ ARM Macro Assembler    Page 10
               00000000 
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M3 --apcs=interw
 ork --depend="spi and adc1\startup_stm32f205xx.d" -o"spi and adc1\startup_stm32
-f205xx.o" -IF:\Documents\STM32F205--RBT6\CubeMx205R-C\Yifan\STM32F205_keil_prj_
-IMU828_330BI_383ZA_IMU331_20201203\STM32F205_keil_prj_IMU828_330BI_383ZA_IMU331
+f205xx.o" -IF:\Documents\STM32F205--RBT6\CubeMx205R-C\SPI_adc1_CAN_UART_HAL_F20
+5RBT6_20200319-pps-interrupt_Aceinna_add_I2C_90Mclk_1.35MSPi\MDK-ARM\RTE -IC:\K
 
 
 
 ARM Macro Assembler    Page 11 
 
 
-_20201203\MDK-ARM\RTE -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\4.2.0\CMSIS\Include -IC:\
-Keil_v5\ARM\PACK\Keil\STM32F2xx_DFP\2.9.0 --predefine="__MICROLIB SETA 1" --pre
-define="__UVISION_VERSION SETA 514" --predefine="_RTE_ SETA 1" --predefine="STM
-32F205xx SETA 1" --list=startup_stm32f205xx.lst startup_stm32f205xx.s
+eil_v5\ARM\PACK\ARM\CMSIS\4.2.0\CMSIS\Include -IC:\Keil_v5\ARM\PACK\Keil\STM32F
+2xx_DFP\2.9.0 --predefine="__MICROLIB SETA 1" --predefine="__UVISION_VERSION SE
+TA 514" --predefine="_RTE_ SETA 1" --predefine="STM32F205xx SETA 1" --list=star
+tup_stm32f205xx.lst startup_stm32f205xx.s
 
 
 
@@ -1645,7 +1645,15 @@ Symbol: WWDG_IRQHandler
       At line 79 in file startup_stm32f205xx.s
       At line 225 in file startup_stm32f205xx.s
 
-89 symbols
+y 00000000
+
+Symbol: y
+   Definitions
+      At line 173 in file startup_stm32f205xx.s
+   Uses
+      None
+Comment: y unused
+90 symbols
 
 
 
@@ -1700,4 +1708,4 @@ Symbol: __main
       At line 175 in file startup_stm32f205xx.s
 Comment: __main used once
 2 symbols
-440 symbols in table
+441 symbols in table

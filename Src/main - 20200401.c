@@ -16,7 +16,7 @@
   *
   ******************************************************************************
 	SPI1:
-	STM32F205RBTx ---- 300evk:
+	STM32F205RBTx ---- 300evk:	
 	PA4-----------------CS
 	PA5-----------------SCK
 	PA6-----------------MISO
@@ -45,10 +45,6 @@
 	GNG  ------------ GND_EVK
 	天线
 	
-	I2C2:
-	PB10-SCL  ---------- SCL IN MPU6050
-	PB11-SDA  ---------- SDA IN MPU6050
-	
   */
 /* USER CODE END Header */
 
@@ -60,8 +56,6 @@
 #include "stdio.h"
 #include "string.h"
 #include "stdlib.h"
-
-#include "mpu6050.h"
 
 /* USER CODE END Includes */
 
@@ -80,8 +74,8 @@ void HAL_SPI_W_R(uint8_t *send_data, uint8_t *target_register);
 void HAL_SPI_Print_Burst(uint8_t* spi_rx_data, uint8_t subregister_num); //statu, gyro*3, acc*3,temp,drdy_length, pps_after.....
 
 uint8_t spi_drdy_on = 0;
-uint8_t spi_quiet = 0;
-uint8_t spi_single_mode = 1;
+uint8_t spi_quiet = 1;
+uint8_t spi_single_mode = 0;
 uint8_t spi_single_reg = 0x56;
 uint8_t spi_burst_mode = 1;
 uint8_t spi_burst_reg = 0x3E; //3E is 8 words, 3F is 10 words, pls remember to change other codes on 2 areas
@@ -90,10 +84,10 @@ uint8_t spi_rx_data[11][2] = {0X00};
 
 uint8_t spi_write_mode = 0;	
 uint8_t spi_write_save = 0;      //spi write data and write registers, SAVE temp == 0, SAVE permanently == 1
-uint8_t spi_write_data = 0X0;	
+uint8_t spi_write_data = 0X01;	
 uint8_t spi_write_register = 0X37;	
-uint8_t spi_write_save_data= 0X10;	 //00 can be used in 381 and 330, 300
-uint8_t spi_write_save_register = 0X37;	
+uint8_t spi_write_save_data= 0XFF;	
+uint8_t spi_write_save_register = 0X76;	
 
 uint8_t print_status=1;
 //----------------------------------------------------------------------------SPI self function declaration
@@ -125,14 +119,7 @@ uint8_t uart_tx_data[2]= "z1";
 int fputc(int ch, FILE *f);
 void set_value(char *cmd, int *value);
 //-----------------------------------------------------------------------------UART1 End
-//-----------------------------------------------------------------------------IIC I2C START
-//uint8_t iic_rxdata(I2C_TypeDef* I2CX);
-uint8_t h_data;
-uint8_t l_data;
-int16_t temp_data; 
-short sht_data[7];
-static float full_data[7]; // acce 3个, temperature 1个，gyro 3个
-//-----------------------------------------------------------------------------IIC I2C END
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -144,8 +131,6 @@ static float full_data[7]; // acce 3个, temperature 1个，gyro 3个
 ADC_HandleTypeDef hadc1;
 
 CAN_HandleTypeDef hcan1;
-
-I2C_HandleTypeDef hi2c2;
 
 SPI_HandleTypeDef hspi1;
 
@@ -164,7 +149,6 @@ static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -225,7 +209,6 @@ int main(void)
   MX_SPI1_Init();
   MX_CAN1_Init();
   MX_USART1_UART_Init();
-  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 	vApp_User_CAN_Configuration();
 	HAL_UART_Receive_IT(&huart1, (uint8_t *)&aRxBuffer, 1);
@@ -238,21 +221,13 @@ int main(void)
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);  //reset power up the IMU330(runing master first, and then start IMU. must for 330)
 	HAL_Delay(1000);
 	//printf("reg,status,gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z,temp,drdy_length,pps_after\n");
-	
-	//I2C2 mpu6050
-	
-	MPU_Init();
-	
-	
-	//I2C2 mpu6050
-	
 
   while(1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		 //--------------------------------------------------------------------------------SPI BEGIN
+		//--------------------------------------------------------------------------------SPI BEGIN
 		//interrupt callback func() working at bottom of main.c
 		if(spi_single_mode && spi_quiet == 0 && spi_drdy_on == 0)
 		{
@@ -290,7 +265,7 @@ int main(void)
 			}
 			spi_write_mode = 0;
 		}
-		//--------------------------------------------------------------------------------SPI END 
+		//--------------------------------------------------------------------------------SPI END
 		
 		//--------------------------------------------------------------------------------CAN BEGIN				
 		//vApp_User_CAN1_TxMessage(CAN_TxData, 3);  //send CAN message, data(CAN_TxData) and ID(vApp_User_CAN_Configuration)
@@ -322,50 +297,6 @@ int main(void)
 				
 		//HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15); // only reverse the voltage level
 		
-		//I2C2
-		//HAL_Delay(10);
-		/*for(uint8_t i=0x3B; i<0x49; i++)
-		{
-			
-			h_data = MPU_Read_Byte(i);
-			l_data = MPU_Read_Byte(++i);
-			temp_data = (h_data<<8)+l_data;
-			if (i < 0x41)
-			{
-				full_data[(i-0x3C)/2] = temp_data/16384.0;			
-				printf("\r\n---------加速度%d轴原始数据---------是:%f, FULLDATA IS: %f", i, temp_data/16384.0, full_data[(i-0x3C)/2]);
-			}
-			if ((i > 0x40) && (i < 0x43))
-			{
-				full_data[(i-0x3C)/2] = 36.53+((double)temp_data)/340;			
-				printf("\r\n---------温度%d轴原始数据---------是:%f, FULLDATA IS: %f", i, temp_data*1.0, full_data[(i-0x3C)/2]);
-			}
-			if ((i > 0x42) && (i < 0x49))
-			{
-				full_data[(i-0x3C)/2] = temp_data/65.5;			
-				printf("\r\n---------陀螺仪%d轴原始数据---------是:%f, FULLDATA IS: %f", i, temp_data/65.5, full_data[(i-0x3C)/2]);
-			} 
-		}*/
-		
-		/*MPU_Get_Accelerometer(sht_data, sht_data+1, sht_data+2);
-		full_data[3] = MPU_Get_Temperature();
-		MPU_Get_Gyroscope(sht_data+4, sht_data+5, sht_data+6);
-		for (uint8_t j = 0; j < 7; j++)
-		{
-			if (j < 3)
-			{
-				full_data[j] = sht_data[j]/16384.0; 
-			}
-			if (j > 3)
-			{
-				full_data[j] = sht_data[j]/65.5; 
-			}
-			printf("	%d is: %f", j, full_data[j]);
-		}
-		printf("\n---");*/
-
-		//I2C2
-		
   }
   /* USER CODE END 3 */
 }
@@ -386,9 +317,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 10;
-  RCC_OscInitStruct.PLL.PLLN = 225;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 16;
+  RCC_OscInitStruct.PLL.PLLN = 240;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -403,7 +334,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -493,40 +424,6 @@ static void MX_CAN1_Init(void)
   /* USER CODE BEGIN CAN1_Init 2 */
 
   /* USER CODE END CAN1_Init 2 */
-
-}
-
-/**
-  * @brief I2C2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_I2C2_Init(void)
-{
-
-  /* USER CODE BEGIN I2C2_Init 0 */
-
-  /* USER CODE END I2C2_Init 0 */
-
-  /* USER CODE BEGIN I2C2_Init 1 */
-
-  /* USER CODE END I2C2_Init 1 */
-  hi2c2.Instance = I2C2;
-  hi2c2.Init.ClockSpeed = 400000;
-  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c2.Init.OwnAddress1 = 0;
-  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c2.Init.OwnAddress2 = 0;
-  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN I2C2_Init 2 */
-
-  /* USER CODE END I2C2_Init 2 */
 
 }
 
@@ -779,7 +676,7 @@ void set_value(char *cmd, int *value)
 			print_status = *value;
 			printf("get request success!");
 		}
-		else if(strcmp(cmd, "cur_val")==0)
+		else if(strcmp(cmd, "current_value")==0)
 		{
 			 printf("spi_drdy_on=0x%x\nspi_quiet=0x%x\nspi_single_mode=0x%x\nspi_single_reg=0x%x\nspi_burst_mode=0x%x\nspi_burst_reg=0x%x\nspi_burst_subregisters_num=0x%x\nspi_write_mode=0x%x\nspi_write_save=0x%x\nspi_write_data=0x%x\nspi_write_register=0x%x\nprint_status=0x%x\n",\
 								spi_drdy_on, spi_quiet, spi_single_mode, spi_single_reg, spi_burst_mode, spi_burst_reg, spi_burst_subregisters_num,spi_write_mode, spi_write_save, spi_write_data, spi_write_register, print_status);
@@ -795,15 +692,11 @@ void set_value(char *cmd, int *value)
 void HAL_SPI_T_R(uint8_t *send_data, uint8_t *get_data, uint8_t frequency)
 {  
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET); //SET A4 low 
-	//HAL_Delay_us(4);
   //HAL_SPI_TransmitReceive(&hspi1,data,data,2,1000); // time interval between 2 word(16-bits) cannot be adjusted, so not used the sentence
   HAL_SPI_Transmit(&hspi1,send_data,2,5);  //request to register
   HAL_Delay_us(20); //give time interval 16 us between 2 16bits, met t-interval > 15 micro-seconds
   HAL_SPI_Receive(&hspi1,get_data,2,5);   //receive IMU register back data
-	//HAL_Delay_us(4);
    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  //A4 back to high
-	//HAL_Delay_us(2);
-	
 }
 
 /**
@@ -832,7 +725,7 @@ void HAL_SPI_T_R_Burst(uint8_t *send_data, uint8_t* get_data, uint8_t subregiste
 
 		for(int i=0; i<subregister_num; i++)
 		{
-			//HAL_Delay_us(20);
+			HAL_Delay_us(20);
 			HAL_SPI_Receive(&hspi1, &(get_data[2*i]),2,5);			
 		}						
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  //A4 back to high    
@@ -848,7 +741,7 @@ void HAL_SPI_Print_Burst(uint8_t* spi_rx_data, uint8_t subregister_num) //statu,
 				temp -= 65536;
 			if(i>0 && i<4)
 			{				
-				printf(",%f", temp/200.0);
+				printf(",%f", temp/64.0);
 			}
 			else if(i>3 && i<7)
 			{
@@ -1046,21 +939,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		}
 		
 }
-
-/*
-uint8_t iic_rxdata(I2C_TypeDef* I2CX) 
-{
-    uint32_t Tx_MailBox;
-		uint32_t temp = 0x18;  
-	  uint8_t aRxData[8];
-	
-		uint8_t data0[1] = {0x01,};
-		//uint8_t data_1[1] = {};
-		//HAL_I2C_Master_Transmit(&hi2c2, 0x78, data0, 1, 100); //??????
-		//HAL_I2C_Master_Receive(&hi2c2, 0x68, data_1, 1, 100); //??????
-		
-		return (uint8_t)I2CX->DR;
-}*/
 
 
 	

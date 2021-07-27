@@ -16,16 +16,13 @@
   *
   ******************************************************************************
 	SPI1:
-	STM32F205RBTx ---- 300evk:
+	STM32F205RBTx ---- 300evk:	
 	PA4-----------------CS
 	PA5-----------------SCK
 	PA6-----------------MISO
 	PA7-----------------MOSI
 	GND(near 5VIN)-----GND
 	PA2----------------nRST may exist problem, so not recommended
-	PC14----------------DRDY
-	PC13----------------1PPS----GPS_PPS
-	PB15---Logic analyzer to detect, sync with PPS rising edge
 	
 	UART1:
 	stm32F205rtb6------CH340:
@@ -39,16 +36,6 @@
 	PB8 CAN1_RX--------CAN_RX
 	CAN_RX0 interrupts---yes
 	
-	PPS: 
-	UBLOX M8N  ------- 300_EVK
-	USB power supply
-	GNG  ------------ GND_EVK
-	天线
-	
-	I2C2:
-	PB10-SCL  ---------- SCL IN MPU6050
-	PB11-SDA  ---------- SDA IN MPU6050
-	
   */
 /* USER CODE END Header */
 
@@ -58,10 +45,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
-#include "string.h"
-#include "stdlib.h"
-
-#include "mpu6050.h"
 
 /* USER CODE END Includes */
 
@@ -77,25 +60,6 @@ void HAL_Delay_us(uint8_t num);
 void HAL_SPI_T_R(uint8_t* send_data, uint8_t* get_data, uint8_t frequency);
 void HAL_SPI_T_R_Burst(uint8_t *send_data, uint8_t* get_data, uint8_t subregister_num, uint8_t frequency);
 void HAL_SPI_W_R(uint8_t *send_data, uint8_t *target_register);
-void HAL_SPI_Print_Burst(uint8_t* spi_rx_data, uint8_t subregister_num); //statu, gyro*3, acc*3,temp,drdy_length, pps_after.....
-
-uint8_t spi_drdy_on = 0;
-uint8_t spi_quiet = 0;
-uint8_t spi_single_mode = 1;
-uint8_t spi_single_reg = 0x56;
-uint8_t spi_burst_mode = 1;
-uint8_t spi_burst_reg = 0x3E; //3E is 8 words, 3F is 10 words, pls remember to change other codes on 2 areas
-uint8_t spi_burst_subregisters_num = 8;
-uint8_t spi_rx_data[11][2] = {0X00};
-
-uint8_t spi_write_mode = 0;	
-uint8_t spi_write_save = 0;      //spi write data and write registers, SAVE temp == 0, SAVE permanently == 1
-uint8_t spi_write_data = 0X0;	
-uint8_t spi_write_register = 0X37;	
-uint8_t spi_write_save_data= 0X10;	 //00 can be used in 381 and 330, 300
-uint8_t spi_write_save_register = 0X37;	
-
-uint8_t print_status=1;
 //----------------------------------------------------------------------------SPI self function declaration
 
 //----------------------------------------------------------------------------CAN self function declaration
@@ -113,26 +77,9 @@ CAN_FilterTypeDef hCAN1_Filter; //CAN1???
 //----------------------------------------------------------------------------CAN END
 
 //-----------------------------------------------------------------------------UART1 Start
-uint8_t aRxBuffer;
-uint8_t Uart1_RxBuff[256];
-uint8_t Uart1_Rx_Cnt = 0;
-
-int value = 0x00;
-char *cmd = "";
-char uart_rx_data[50];
-uint8_t uart_tx_data[2]= "z1";
-
 int fputc(int ch, FILE *f);
-void set_value(char *cmd, int *value);
 //-----------------------------------------------------------------------------UART1 End
-//-----------------------------------------------------------------------------IIC I2C START
-//uint8_t iic_rxdata(I2C_TypeDef* I2CX);
-uint8_t h_data;
-uint8_t l_data;
-int16_t temp_data; 
-short sht_data[7];
-static float full_data[7]; // acce 3个, temperature 1个，gyro 3个
-//-----------------------------------------------------------------------------IIC I2C END
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -145,12 +92,9 @@ ADC_HandleTypeDef hadc1;
 
 CAN_HandleTypeDef hcan1;
 
-I2C_HandleTypeDef hi2c2;
-
 SPI_HandleTypeDef hspi1;
 
 UART_HandleTypeDef huart1;
-DMA_HandleTypeDef hdma_usart1_rx;
 
 /* USER CODE BEGIN PV */
 
@@ -159,12 +103,10 @@ DMA_HandleTypeDef hdma_usart1_rx;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -183,6 +125,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
+  
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -198,10 +141,18 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
 	//----------------------------------------SPI Variables and preparation BEGIN
+	uint8_t SPI_TXdata[2] = {0X37, 0X00};	
+	uint8_t SPI_TXdata2[2] = {0X7E, 0X00};	
+	uint8_t SPI_Burstdata[2] = {0X3E, 0X00};	 //3E is 8 words, 3F is 10 words, pls remember to change other codes 
+	uint8_t SPI_RXdata[11][2] = {0X00};
 	
+	uint8_t SPI_W_SAVE = 1;      //spi write data and write registers, SAVE temp == 0, SAVE permanently == 1
+	uint8_t SPI_WRdata[1] = {0X01};	
+	uint8_t SPI_WRregister[1] = {0X37};	
+	uint8_t SPI_WRdata_SAVE = 0XFF;	
+	uint8_t SPI_WRreg_SAVE = 0X76;		
 	
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  //A4 back to high      1. keep ground together with Master and Slave ---must
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);  //first pull up, used for indicate PPS rising edge detection by pull down(change to reset) later
 	//----------------------------------------SPI Variables and preparation END
 
 	//CAN-------------------------------------CAN_1 Variables and preparation BEGIN  0x601
@@ -211,24 +162,20 @@ int main(void)
 	//CAN-------------------------------------CAN_1 Variables and preparation END
 	
 	//UART1-------------------------------------UART_1 Variables and preparation BEGIN  SWD disconnected---must
-	
-	
-
+	uint8_t UART_TxData[2]= "z1";
+	uint8_t UART_RxData='F';
 	//UART1-------------------------------------UART_1 Variables and preparation END
 	
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_ADC1_Init();
   MX_SPI1_Init();
   MX_CAN1_Init();
   MX_USART1_UART_Init();
-  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 	vApp_User_CAN_Configuration();
-	HAL_UART_Receive_IT(&huart1, (uint8_t *)&aRxBuffer, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -237,80 +184,65 @@ int main(void)
 	HAL_Delay(1000);
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);  //reset power up the IMU330(runing master first, and then start IMU. must for 330)
 	HAL_Delay(1000);
-	//printf("reg,status,gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z,temp,drdy_length,pps_after\n");
-	
-	//I2C2 mpu6050
-	
-	MPU_Init();
-	
-	
-	//I2C2 mpu6050
-	
-
-  while(1)
+	printf("restart IMU finished!\t");	
+	printf("start while loop function:\n");
+	int temp = 0;
+	int i = 0;
+  while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
-		 //--------------------------------------------------------------------------------SPI BEGIN
-		//interrupt callback func() working at bottom of main.c
-		if(spi_single_mode && spi_quiet == 0 && spi_drdy_on == 0)
+		//--------------------------------------------------------------------------------SPI BEGIN
+		//single mode
+		HAL_Delay(5);
+		HAL_SPI_T_R(SPI_TXdata, SPI_RXdata[0], 200); //single read ID 0x56 or 0x0E z_accel, 0x56, 00, 00, 00
+		printf("reg: 0x%02x DATA single: 0x%02x-%02x\n", *SPI_TXdata,*SPI_RXdata[0],*(SPI_RXdata[0]+1));
+		//HAL_Delay(5);	
+		//HAL_SPI_T_R(SPI_TXdata2, SPI_RXdata[1], 200); //single read ID 0x56 or 0x0E z_accel, 0x56, 00, 00, 00		
+		//printf("reg: 0x%02x DATA single: 0x%02x-%02x\n", *SPI_TXdata2,*SPI_RXdata[1],*(SPI_RXdata[1]+1));		
+		
+		//Write mode: write data to target register, such as 0xF010, target address is 0x70, and data input is 0x10
+		for(; i<10; i++)
 		{
 			HAL_Delay(5);	
-			HAL_SPI_T_R(&spi_single_reg, spi_rx_data[1], 200); //single read ID 0x56 or 0x0E z_accel, 0x56, 00, 00, 00		
-			if(print_status)
-			{
-				printf("%02x %02x %02x\n", spi_single_reg, *spi_rx_data[1],*(spi_rx_data[1]+1));	
-			}
+			printf("write register:0x%02x  write data:0x%02x\n", *SPI_WRregister, *SPI_WRdata);			
+			HAL_SPI_W_R(SPI_WRdata, SPI_WRregister);
+		}  
+		if(SPI_W_SAVE == 1 && i < 11)
+		{
+			HAL_Delay(1000); //parpare to write register0x76 with 0xFF data to save configuration
+		  HAL_SPI_W_R(&SPI_WRdata_SAVE, &SPI_WRreg_SAVE);
+			i++;
+			HAL_Delay(1000); //parpare to write register0x76 with 0xFF data to save configuration
+			printf("write register SAVED \n");
 		}
 		
-		if(spi_burst_mode && spi_quiet == 0 && spi_drdy_on == 0)
+		//burst mode
+		HAL_Delay(5);	
+		HAL_SPI_T_R_Burst(SPI_Burstdata, SPI_RXdata[0], 8, 200);  //only support 330,300
+		printf("request:0x%02x burst:", *SPI_Burstdata);
+		for(int i=0; i < 8; i++)
 		{
-			HAL_Delay(5);	
-			HAL_SPI_T_R_Burst(&spi_burst_reg, spi_rx_data[0], spi_burst_subregisters_num, 200);  //only support 330,300
-			
-			if(print_status)
-			{
-				printf("%02x",  spi_burst_reg);
-				HAL_SPI_Print_Burst(spi_rx_data[0], spi_burst_subregisters_num); 
-			}		
-		}
+			printf("0x%02x%02x ", SPI_RXdata[i][0], SPI_RXdata[i][1]);
+		}	
+		printf("\n");
 		
-		if(spi_write_mode) //Write mode: write data to target register, such as 0xF010, target address is 0x70, and data input is 0x10
-		{
-			HAL_Delay(5);						
-			HAL_SPI_W_R(&spi_write_data, &spi_write_register); 
-			printf("write data:0x%02x to register:0x%02x finished!\n", spi_write_data, spi_write_register);				
-			if(spi_write_save == 1)
-			{
-				HAL_Delay(1000); //parpare to write register0x76 with 0xFF data to save configuration
-				HAL_SPI_W_R(&spi_write_save_data, &spi_write_save_register);
-				HAL_Delay(1000); //parpare to write register0x76 with 0xFF data to save configuration
-				printf("saved configurations!\n");
-			}
-			spi_write_mode = 0;
-		}
-		//--------------------------------------------------------------------------------SPI END 
+		//--------------------------------------------------------------------------------SPI END
 		
 		//--------------------------------------------------------------------------------CAN BEGIN				
 		//vApp_User_CAN1_TxMessage(CAN_TxData, 3);  //send CAN message, data(CAN_TxData) and ID(vApp_User_CAN_Configuration)
 		//receive realized in interrupt function: HAL_CAN_RxFifo0MsgPendingCallback
 		//--------------------------------------------------------------------------------CAN END
 
-		//USART1--------------------------------------------------------------------------USART1 BEGIN		
-		//memset(uart_rx_data, 0, 50);
-		//HAL_UART_Receive(&huart1,(uint8_t *)uart_rx_data,50,0); //1000ms receive one data
-		
-		//if(strlen(uart_rx_data) != 0)
+		//USART1--------------------------------------------------------------------------USART1 BEGIN	
+		//printf("--Start: send by UART area--");		
+		//HAL_UART_Transmit(&huart1,UART_TxData,2,0xffff);//send TxData by huart1,length is 10,timeout is 0xffff		
+		//HAL_UART_Receive(&huart1,(uint8_t *)&UART_RxData,1,1000); //1000ms receive one data
+		//if (UART_RxData != 'F')
 		//{
-			//printf("%s %d\n", uart_rx_data, strlen(uart_rx_data));
-		//}
-		
-		
-		
-		//sscanf(uart_rx_data, "%s = %u", cmd, &value);
-		//set_value(cmd, &value);		
-		
+			//UART_RxData = 0;
+		//}		
+		//printf("--End: UART area--");	
 		//USART1--------------------------------------------------------------------------USART1 END		
 		
 		// 1 pps signal simulator---------------------------------------------------------PPS START
@@ -321,50 +253,6 @@ int main(void)
 		// 1 pps signal simulator---------------------------------------------------------PPS START
 				
 		//HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15); // only reverse the voltage level
-		
-		//I2C2
-		//HAL_Delay(10);
-		/*for(uint8_t i=0x3B; i<0x49; i++)
-		{
-			
-			h_data = MPU_Read_Byte(i);
-			l_data = MPU_Read_Byte(++i);
-			temp_data = (h_data<<8)+l_data;
-			if (i < 0x41)
-			{
-				full_data[(i-0x3C)/2] = temp_data/16384.0;			
-				printf("\r\n---------加速度%d轴原始数据---------是:%f, FULLDATA IS: %f", i, temp_data/16384.0, full_data[(i-0x3C)/2]);
-			}
-			if ((i > 0x40) && (i < 0x43))
-			{
-				full_data[(i-0x3C)/2] = 36.53+((double)temp_data)/340;			
-				printf("\r\n---------温度%d轴原始数据---------是:%f, FULLDATA IS: %f", i, temp_data*1.0, full_data[(i-0x3C)/2]);
-			}
-			if ((i > 0x42) && (i < 0x49))
-			{
-				full_data[(i-0x3C)/2] = temp_data/65.5;			
-				printf("\r\n---------陀螺仪%d轴原始数据---------是:%f, FULLDATA IS: %f", i, temp_data/65.5, full_data[(i-0x3C)/2]);
-			} 
-		}*/
-		
-		/*MPU_Get_Accelerometer(sht_data, sht_data+1, sht_data+2);
-		full_data[3] = MPU_Get_Temperature();
-		MPU_Get_Gyroscope(sht_data+4, sht_data+5, sht_data+6);
-		for (uint8_t j = 0; j < 7; j++)
-		{
-			if (j < 3)
-			{
-				full_data[j] = sht_data[j]/16384.0; 
-			}
-			if (j > 3)
-			{
-				full_data[j] = sht_data[j]/65.5; 
-			}
-			printf("	%d is: %f", j, full_data[j]);
-		}
-		printf("\n---");*/
-
-		//I2C2
 		
   }
   /* USER CODE END 3 */
@@ -386,9 +274,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 10;
-  RCC_OscInitStruct.PLL.PLLN = 225;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 16;
+  RCC_OscInitStruct.PLL.PLLN = 240;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -403,7 +291,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -497,40 +385,6 @@ static void MX_CAN1_Init(void)
 }
 
 /**
-  * @brief I2C2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_I2C2_Init(void)
-{
-
-  /* USER CODE BEGIN I2C2_Init 0 */
-
-  /* USER CODE END I2C2_Init 0 */
-
-  /* USER CODE BEGIN I2C2_Init 1 */
-
-  /* USER CODE END I2C2_Init 1 */
-  hi2c2.Instance = I2C2;
-  hi2c2.Init.ClockSpeed = 400000;
-  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c2.Init.OwnAddress1 = 0;
-  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c2.Init.OwnAddress2 = 0;
-  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN I2C2_Init 2 */
-
-  /* USER CODE END I2C2_Init 2 */
-
-}
-
-/**
   * @brief SPI1 Initialization Function
   * @param None
   * @retval None
@@ -596,24 +450,8 @@ static void MX_USART1_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART1_Init 2 */
-	
+
   /* USER CODE END USART1_Init 2 */
-
-}
-
-/** 
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void) 
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA2_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA2_Stream2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
 
 }
 
@@ -627,7 +465,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
@@ -636,18 +473,6 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : pps_PC13_Pin */
-  GPIO_InitStruct.Pin = pps_PC13_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(pps_PC13_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : drdy_ready_PC14_Pin */
-  GPIO_InitStruct.Pin = drdy_ready_PC14_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(drdy_ready_PC14_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PA2 PA4 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_4;
@@ -662,10 +487,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
 
@@ -685,108 +506,6 @@ void HAL_Delay_us(uint8_t num)
  }
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-  UNUSED(huart);
- 
-	if(Uart1_Rx_Cnt >= 255)  //????
-	{
-		Uart1_Rx_Cnt = 0;
-		memset(Uart1_RxBuff,0x00,sizeof(Uart1_RxBuff));
-		HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_data, sizeof(uart_tx_data),0xFFFF);	
-	}
-	else
-	{
-		Uart1_RxBuff[Uart1_Rx_Cnt++] = aRxBuffer;		
-	
-		if((Uart1_RxBuff[Uart1_Rx_Cnt-1] == 0x0A)&&(Uart1_RxBuff[Uart1_Rx_Cnt-2] == 0x0D)) 
-		{
-			HAL_UART_Transmit(&huart1, (uint8_t *)&Uart1_RxBuff, Uart1_Rx_Cnt,0xFFFF); 
-			
-			char *next_token = NULL;
-			cmd = strtok_r(Uart1_RxBuff, "=", &next_token);
-			value = strtoimax(strtok_r(NULL, "=", &next_token),next_token,0);			
-			set_value(cmd, &value);	
-			
-			Uart1_Rx_Cnt = 0;
-			memset(Uart1_RxBuff,0x00,sizeof(Uart1_RxBuff)); 
-		}
-	}
-	
-	HAL_UART_Receive_IT(&huart1, (uint8_t *)&aRxBuffer, 1);   
-}
-
-void set_value(char *cmd, int *value)
-	{
-		printf("cmd:%s value:%d\n",cmd, *value);
-		if(strcmp(cmd, "spi_drdy_on")==0)
-		{
-			spi_drdy_on = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_quiet")==0)
-		{
-			spi_quiet = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_single_mode")==0)
-		{
-			spi_single_mode = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_single_reg")==0)
-		{
-			spi_single_reg = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_burst_mode")==0)
-		{
-			spi_burst_mode = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_burst_reg")==0)
-		{
-			spi_burst_reg = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_burst_subregisters_num")==0)
-		{
-			spi_burst_subregisters_num = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_write_mode")==0)
-		{
-			spi_write_mode = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_write_save")==0)
-		{
-			spi_write_save = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_write_data")==0)
-		{
-			spi_write_data = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "spi_write_register")==0)
-		{
-			spi_write_register = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "print_status")==0)
-		{
-			print_status = *value;
-			printf("get request success!");
-		}
-		else if(strcmp(cmd, "cur_val")==0)
-		{
-			 printf("spi_drdy_on=0x%x\nspi_quiet=0x%x\nspi_single_mode=0x%x\nspi_single_reg=0x%x\nspi_burst_mode=0x%x\nspi_burst_reg=0x%x\nspi_burst_subregisters_num=0x%x\nspi_write_mode=0x%x\nspi_write_save=0x%x\nspi_write_data=0x%x\nspi_write_register=0x%x\nprint_status=0x%x\n",\
-								spi_drdy_on, spi_quiet, spi_single_mode, spi_single_reg, spi_burst_mode, spi_burst_reg, spi_burst_subregisters_num,spi_write_mode, spi_write_save, spi_write_data, spi_write_register, print_status);
-		}
-	}	
-
-
 /**
   * @brief send and receive the data, single read（8bits mode, 1Mhz）
   * @param None
@@ -795,15 +514,11 @@ void set_value(char *cmd, int *value)
 void HAL_SPI_T_R(uint8_t *send_data, uint8_t *get_data, uint8_t frequency)
 {  
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET); //SET A4 low 
-	//HAL_Delay_us(4);
   //HAL_SPI_TransmitReceive(&hspi1,data,data,2,1000); // time interval between 2 word(16-bits) cannot be adjusted, so not used the sentence
   HAL_SPI_Transmit(&hspi1,send_data,2,5);  //request to register
   HAL_Delay_us(20); //give time interval 16 us between 2 16bits, met t-interval > 15 micro-seconds
   HAL_SPI_Receive(&hspi1,get_data,2,5);   //receive IMU register back data
-	//HAL_Delay_us(4);
    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  //A4 back to high
-	//HAL_Delay_us(2);
-	
 }
 
 /**
@@ -828,50 +543,14 @@ void HAL_SPI_T_R_Burst(uint8_t *send_data, uint8_t* get_data, uint8_t subregiste
 {		
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);	//SET A4 low	
 		//HAL_SPI_TransmitReceive(&hspi1,data,data,2,1000);	// time interval between 2 word(16-bits) cannot be adjusted, so not used the sentence
-		HAL_SPI_Transmit(&hspi1,send_data,2,5);	
+		HAL_SPI_Transmit(&hspi1,send_data,2,5);		
 
 		for(int i=0; i<subregister_num; i++)
 		{
-			//HAL_Delay_us(20);
+			HAL_Delay_us(20);
 			HAL_SPI_Receive(&hspi1, &(get_data[2*i]),2,5);			
 		}						
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);  //A4 back to high    
-}
-
-void HAL_SPI_Print_Burst(uint8_t* spi_rx_data, uint8_t subregister_num) //statu, gyro*3, acc*3,temp,drdy_length, pps_after.....
-{
-	for(int i=0; i < subregister_num; i++)  //spend 10 ms, i++ ~ 1ms
-		{
-			int temp = 0.0; 
-			temp = (spi_rx_data[2*i]*256 + spi_rx_data[2*i+1]);
-			if(temp > 32767)
-				temp -= 65536;
-			if(i>0 && i<4)
-			{				
-				printf(",%f", temp/200.0);
-			}
-			else if(i>3 && i<7)
-			{
-				printf(",%f", temp/4000.0);
-			}
-			else if(i == 7)
-			{
-				printf(",%f", temp*0.073111172849435+31.0);  //以秒为单位输出drdy_length;
-			}
-			else if(i == 8)
-			{
-				printf(",%f", temp*0.001);  //以秒为单位输出drdy_length;
-			}
-			else if(i == 9)
-			{
-				printf(",%f", temp*0.0001);  //以秒为单位输出pps_after;
-			}
-			else
-			{
-				printf(",0x%02x%02x", spi_rx_data[2*i], spi_rx_data[2*i+1]);
-			}	
-		}
-		printf("\n");
 }
 
 void vApp_CAN_TxHeader_Init(CAN_TxHeaderTypeDef    * pHeader,
@@ -1001,67 +680,6 @@ int fputc(int ch, FILE *f)
 	HAL_UART_Transmit(&huart1,(uint8_t *)&ch,1,0xffff);
 	return ch;
 }
-int drdy_index = 0;
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{		
-		if(GPIO_Pin == drdy_ready_PC14_Pin && spi_drdy_on)
-		{
-			if(spi_single_mode)
-			{
-				HAL_SPI_T_R(&spi_single_reg, spi_rx_data[1], 200); //single read ID 0x56 or 0x0E z_accel, 0x56, 00, 00, 00		
-				if(print_status)
-				{
-					printf("%02x %02x %02x\n", spi_single_reg, *spi_rx_data[1],*(spi_rx_data[1]+1));	
-				}			
-			}
-			
-			if(spi_burst_mode)
-			{
-				HAL_SPI_T_R_Burst(&spi_burst_reg, spi_rx_data[0], spi_burst_subregisters_num, 200);  //only support 330,300				
-				if(print_status)
-				{
-					printf("%02x",  spi_burst_reg);
-					HAL_SPI_Print_Burst(spi_rx_data[0], spi_burst_subregisters_num); 
-				}
-			}
-			//HAL_UART_Transmit(&huart1,UART_Tx_n,2,0xffff);//send TxData by huart1,length is 10,timeout is 0xffff		
-			//HAL_UART_Transmit(&huart1,UART_Tx_t,2,0xffff);//send TxData by huart1,length is 10,timeout is 0xffff
-			
-
-		}
-		
-		
-		
-		if(GPIO_Pin == pps_PC13_Pin && spi_drdy_on)  //another interrupt pin to detect PPS rising edge
-		{				 
-//			  if(drdy_index != 200)
-//				{
-//					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);// detect pps rising edge, pull down
-//			    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
-//					printf("drdy:%d\n", drdy_index);
-//				}
-//				drdy_index = 0;
-//			  printf("pps");
-				//HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15); // only reverse the voltage level
-		}
-		
-}
-
-/*
-uint8_t iic_rxdata(I2C_TypeDef* I2CX) 
-{
-    uint32_t Tx_MailBox;
-		uint32_t temp = 0x18;  
-	  uint8_t aRxData[8];
-	
-		uint8_t data0[1] = {0x01,};
-		//uint8_t data_1[1] = {};
-		//HAL_I2C_Master_Transmit(&hi2c2, 0x78, data0, 1, 100); //??????
-		//HAL_I2C_Master_Receive(&hi2c2, 0x68, data_1, 1, 100); //??????
-		
-		return (uint8_t)I2CX->DR;
-}*/
-
 
 	
 /* USER CODE END 4 */

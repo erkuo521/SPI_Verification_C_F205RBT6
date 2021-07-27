@@ -3,8 +3,8 @@
  * Auto generated Run-Time-Environment Component Configuration File
  *      *** Do not modify ! ***
  *
- * Project: 'SPICANUART' 
- * Target:  'muti_interface' 
+ * Project: 'SPI and adc1' 
+ * Target:  'SPI and adc1' 
  */
 
 #ifndef RTE_COMPONENTS_H

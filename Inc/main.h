@@ -58,9 +58,12 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define openimu_irq_Pin GPIO_PIN_3
-#define openimu_irq_GPIO_Port GPIOC
-#define openimu_irq_EXTI_IRQn EXTI3_IRQn
+#define pps_PC13_Pin GPIO_PIN_13
+#define pps_PC13_GPIO_Port GPIOC
+#define pps_PC13_EXTI_IRQn EXTI15_10_IRQn
+#define drdy_ready_PC14_Pin GPIO_PIN_14
+#define drdy_ready_PC14_GPIO_Port GPIOC
+#define drdy_ready_PC14_EXTI_IRQn EXTI15_10_IRQn
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
